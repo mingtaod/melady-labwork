@@ -1,4 +1,3 @@
-import time
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -16,7 +15,7 @@ import os
 import random
 import sklearn
 from sklearn import metrics
-from sklearn.linear_model import LinearRegression
+# import wandb
 
 
 def train(model, train_loader, criterion, optimizer, epoch, lists, val_loader):
@@ -43,21 +42,14 @@ def train(model, train_loader, criterion, optimizer, epoch, lists, val_loader):
         loss.backward()
         optimizer.step()
 
-        # if i % printing_freq == 0:
-            # progress.display(i)
-        #     val_acc, _ = validate(model, val_loader, criterion, lists, True)
-        #     max_val_acc = max(max_val_acc, val_acc)
-        # else:
-        #     val_acc, _ = validate(model, val_loader, criterion, lists, False)
-        #     max_val_acc = max(max_val_acc, val_acc)
-
     accuracy_curr = correct_record / total_record
-    lists['loss_train'].append(losses.sum)
+    lists['loss_train'].append(losses.avg)
     lists['acc_train'].append(accuracy_curr)
-    print(epoch, '-th epoch     ', 'train loss sum: ', losses.sum, '   train acc avg: ', accuracy_curr)
+    print(epoch, '-th epoch     ', 'train loss sum: ', losses.sum, '   train loss avg: ', losses.avg, '   train acc avg: ', accuracy_curr)
+    return accuracy_curr
 
 
-def validate(model, val_loader, criterion, lists, whether_print):
+def validate(model, val_loader, criterion, lists, whether_print, iteration):
     losses = AverageMeter('Loss', ':.4e')
     y_true = []
     y_score = []
@@ -90,9 +82,9 @@ def validate(model, val_loader, criterion, lists, whether_print):
 
         if whether_print:
             fpr, tpr, thresholds_roc = metrics.roc_curve(y_true, y_score, pos_label=1)
-            plot_roc(fpr, tpr, thresholds_roc)
+            plot_roc(fpr, tpr, thresholds_roc, iteration)
             precision, recall, thresholds_prc = metrics.precision_recall_curve(y_true, y_score, pos_label=1)
-            plot_prc(precision, recall, thresholds_prc)
+            plot_prc(precision, recall, thresholds_prc, iteration)
 
         auc_roc = metrics.roc_auc_score(y_true, y_score)
         auc_roc_float = round(auc_roc.item(), 3)
@@ -101,11 +93,11 @@ def validate(model, val_loader, criterion, lists, whether_print):
 
         accuracy_curr = correct_record / total_record
 
-        print('                ', 'valid loss sum: ', losses.sum, '   valid acc avg: ', accuracy_curr)
+        print('                ', 'valid loss sum: ', losses.sum, '   valid loss avg: ', losses.avg, '   valid acc avg: ', accuracy_curr)
         print('                * AUC_ROC: ', auc_roc_float, '   AUC_PRC: ', auc_prc_float, '\n')
         lists['acc_val'].append(accuracy_curr)
-        lists['loss_val'].append(losses.sum)
-    return accuracy_curr, losses.sum, auc_roc_float, auc_prc_float
+        lists['loss_val'].append(losses.avg)
+    return accuracy_curr, losses.avg, auc_roc_float, auc_prc_float
 
 
 class AverageMeter(object):
@@ -156,27 +148,31 @@ def adjust_learning_rate(optimizer, epoch, args):
         param_group['lr'] = lr
 
 
-def plot_losses(lst_loss, title):
+def plot_losses(lst_loss, title, iteration):
     plt.plot(lst_loss, '-r', label='loss')
     plt.xlabel('nth iteration')
     plt.legend(loc='upper left')
     plt.title(title)
-    plt.savefig(title + '.png')
-    plt.show()
+    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, title+'.png'))
+    plt.savefig(save_path)
+    # plt.show()
+    plt.close()
 
 
-def plot_acc(lst_acc_1, lst_acc_5, title):
+def plot_acc(lst_acc_1, lst_acc_5, title, iteration):
     plt.plot(lst_acc_1, '-b', label='val accuracy@1')
     if lst_acc_5 is not None:
         plt.plot(lst_acc_5, '-r', label='val accuracy@5')
     plt.xlabel('nth iteration')
     plt.legend(loc='upper left')
     plt.title(title)
-    plt.savefig(title + '.png')
-    plt.show()
+    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, title+'.png'))
+    plt.savefig(save_path)
+    # plt.show()
+    plt.close()
 
 
-def plot_roc(fpr_input, tpr_input, threshold_input):
+def plot_roc(fpr_input, tpr_input, threshold_input, iteration):
     plt.plot(fpr_input, tpr_input)
     plt.title('ROC Curve')
     plt.xlabel('False Positive Rate')
@@ -192,11 +188,14 @@ def plot_roc(fpr_input, tpr_input, threshold_input):
     for x, y in zip(fpr_input, tpr_input):
         plt.text(x, y+0.02, '%.2f' % threshold_input[index], ha='center', va='bottom', fontsize=8)
         index += 1
-    plt.show()
+    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, 'valid_roc.png'))
+    plt.savefig(save_path)
+    # plt.show()
+    plt.close()
 
 
 # Todo: 修改这个函数，enable text
-def plot_prc(precision, recall, threshold_input):
+def plot_prc(precision, recall, threshold_input, iteration):
     # print(precision.shape, "---precision")
     # print(recall.shape, "---recall")
     plt.plot(recall, precision)
@@ -210,11 +209,14 @@ def plot_prc(precision, recall, threshold_input):
     ax.yaxis.set_major_locator(y_major_locator)
     plt.xlim(0, 1)
     plt.ylim(0, 1)
-    index = 0
+    # index = 0
     # for x, y in zip(recall, precision):
     #     plt.text(x, y+0.02, '%.2f' % threshold_input[index], ha='center', va='bottom', fontsize=8)
     #     index += 1
-    plt.show()
+    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, 'valid_prc.png'))
+    plt.savefig(save_path)
+    # plt.show()
+    plt.close()
 
 
 def accuracy(output, target, topk=(1,)):
@@ -255,10 +257,12 @@ def count_correct_total(output, target):
         return correct_part_count, len(target)
 
 
-def main(epochs, model, train_loader, val_loader, criterion, optimizer):
+def main(epochs, model, train_loader, val_loader, criterion, optimizer, iteration):
     best_acc = 0.0
+    best_train_acc = 0.0
     best_auc_roc = 0.0
     best_auc_prc = 0.0
+    lowest_avg_loss = float('inf')
     lst_loss_train = []
     lst_acc_train = []
     lst_loss_val = []
@@ -268,24 +272,29 @@ def main(epochs, model, train_loader, val_loader, criterion, optimizer):
              'loss_val': lst_loss_val,
              'acc_val': lst_acc_val}
     for epoch in range(0, epochs):
-        train(model, train_loader, criterion, optimizer, epoch, lists, val_loader)
+        train_acc_curr = train(model, train_loader, criterion, optimizer, epoch, lists, val_loader)
         if epoch == epochs-1:
-            curr_acc, curr_loss, auc_roc, auc_prc = validate(model, val_loader, criterion, lists, True)
+            curr_acc, curr_loss, auc_roc, auc_prc = validate(model, val_loader, criterion, lists, True, iteration)
         else:
-            curr_acc, curr_loss, auc_roc, auc_prc = validate(model, val_loader, criterion, lists, False)
+            curr_acc, curr_loss, auc_roc, auc_prc = validate(model, val_loader, criterion, lists, False, iteration)
         best_acc = max(curr_acc, best_acc)
+        best_train_acc= max(train_acc_curr, best_train_acc)
+        lowest_avg_loss = min(curr_loss, lowest_avg_loss)
         best_auc_roc = max(auc_roc, best_auc_roc)
         best_auc_prc = max(auc_prc, best_auc_prc)
 
-    plot_acc(lists['acc_train'], None, 'train_acc_plot')
-    plot_losses(lists['loss_train'], 'train_loss_plot')
-    plot_acc(lists['acc_val'], None, 'valid_acc_plot')
-    plot_losses(lists['loss_val'], 'valid_loss_plot')
+    plot_acc(lists['acc_train'], None, 'train_acc_plot', iteration)
+    plot_losses(lists['loss_train'], 'train_loss_plot', iteration)
+    plot_acc(lists['acc_val'], None, 'valid_acc_plot', iteration)
+    plot_losses(lists['loss_val'], 'valid_loss_plot', iteration)
 
+    print('Best training accuracy = ', best_train_acc)
     print('Best validation accuracy = ', best_acc)
+    print('Lowest average validation loss = ', lowest_avg_loss)
     print('Best auc_roc = ', best_auc_roc)
     print('Best auc_prc = ', best_auc_prc)
     print('\n')
+    return best_auc_roc, best_auc_prc, best_train_acc, best_acc
 
 
 def shuffle_label_file(file_name):
@@ -310,8 +319,8 @@ def write_files(valid_file, train_file, labels, k, i):
             train_labels = part
         else:
             train_labels.extend(part)
-    print(train_labels)
-    print(valid_labels)
+    # print(train_labels)
+    # print(valid_labels)
     out_train = open(train_file, 'w')
     out_valid = open(valid_file, 'w')
     for train_label in train_labels:
@@ -360,34 +369,39 @@ class BurnDataset(torch.utils.data.Dataset):
 class FineTuneResNet(nn.Module):
     def __init__(self, original_model, num_classes):
         super(FineTuneResNet, self).__init__()
-        # num_out_features = original_model.fc.out_features
-        # print('num_out_features', num_out_features)
         fc1 = nn.Linear(2048, 1000)
         relu1 = nn.ReLU()
         fc2 = nn.Linear(1000, 256)
         relu2 = nn.ReLU()
+        # fc3 = nn.Linear(1000, num_classes)
         fc3 = nn.Linear(256, num_classes)
         self.features = nn.Sequential(*list(original_model.children())[:-1])
         self.classifier = nn.Sequential(fc1, relu1, fc2, relu2, fc3)
+        # self.classifier = nn.Sequential(fc1, relu1, fc3)
 
     def forward(self, x):
         out = self.features(x)
-        # print(out.shape)
+        # print('prev out.shape: ', out.shape)
         out = out.view(out.size(0), -1)
+        # print('out.shape: ', out.shape)
         out = self.classifier(out)
         return out
 
 
 if __name__ == '__main__':
+    # wandb.init('my_burn_project')
 
     # Define hyperparameters here
     num_folds = 5
-    batch_size = 2
+    # batch_size = 32--改回这个
+    batch_size = 50
     num_workers = 2
     lr = 0.01
+    # lr = 0.02--可以保持用0.01
+
     momentum = 0.9
     weight_decay = 5e-4
-    epochs = 65
+    epochs = 170
     printing_freq = 20
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -405,10 +419,10 @@ if __name__ == '__main__':
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     train_transform = transforms.Compose([
-        # transforms.RandomResizedCrop(224),
-        # transforms.RandomHorizontalFlip(),
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        # transforms.Resize(256),
+        # transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize
     ])
@@ -418,6 +432,13 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         normalize,
     ])
+
+    sum_auc_roc = 0.0
+    sum_auc_prc = 0.0
+    sum_valid_acc = 0.0
+    highest_auc_roc = 0.0
+    highest_auc_prc = 0.0
+    highest_val_acc = 0.0
 
     # K-folds main loop
     for i in range(num_folds):
@@ -444,7 +465,25 @@ if __name__ == '__main__':
         valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
         print('-------------------K-fold: ', i, '-th iteration starts below-------------------')
-        main(epochs, model, train_loader, valid_loader, criterion, optimizer)
+        auc_roc, auc_prc, train_acc_i, valid_acc_i = main(epochs, model, train_loader, valid_loader, criterion, optimizer, i)
+        sum_auc_roc += auc_roc
+        sum_auc_prc += auc_prc
+        sum_valid_acc += valid_acc_i
+        highest_auc_roc = max(highest_auc_roc, auc_roc)
+        highest_auc_prc = max(highest_auc_prc, auc_prc)
+        highest_val_acc = max(highest_val_acc, valid_acc_i)
+
+    avg_auc_roc = sum_auc_roc / 5
+    avg_auc_prc = sum_auc_prc / 5
+    avg_valid_acc = sum_valid_acc / 5
+
+    print('\nK-fold validation summary: ')
+    print('Average AUC_ROC = ', avg_auc_roc)
+    print('Average AUC_PRC = ', avg_auc_prc)
+    print('Average validation accuracy = ', avg_valid_acc)
+    print('\nBest AUC_ROC = ', highest_auc_roc)
+    print('Best AUC_PRC = ', highest_auc_prc)
+    print('Best validation accuracy = ', highest_val_acc)
 
 
 
