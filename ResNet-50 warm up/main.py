@@ -38,7 +38,7 @@ def train(model, train_loader, criterion, optimizer, epoch, lists):
         output = model(train_data)
         loss = criterion(output, target)
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        # print('item: ', acc1.item())
+        # print(output)
         losses.update(loss.item(), train_data.size(0))
         top1.update(acc1[0], train_data.size(0))
         top5.update(acc5[0], train_data.size(0))
@@ -136,6 +136,23 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
+class FineTuneResnet50(nn.Module):
+    def __init__(self, num_class=8):
+        super(FineTuneResnet50, self).__init__()
+        self.num_class = num_class
+        resnet50_instance = models.resnet50(pretrained=True)
+        self.features = nn.Sequential(*list(resnet50_instance.children())[:-1])
+        self.classifier = nn.Linear(2048, self.num_class)
+
+    def forward(self, x):
+        output = self.features(x)
+        # print('output.shape: ', output.shape)
+        # 下面这行是为了
+        output = torch.flatten(output, 1)
+        output = self.classifier(output)
+        return output
+
+
 # def adjust_learning_rate(optimizer, epoch, args):
 #     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
 #     lr = args.lr * (0.1 ** (epoch // 30))
@@ -221,6 +238,9 @@ if __name__ == '__main__':
         normalize
     ]))
 
+    print('full_dataset.classes: ', full_dataset.classes)
+    print(full_dataset.class_to_idx['motorbike'])
+
     # print(full_dataset[0][0])
     # print(type(full_dataset[0]))  # trainloader里面的每一个元素都是一个tuple，第一个element是一个tensor，第二个是label的编号，这个可能和main——alt中的bug有关系
 
@@ -251,7 +271,7 @@ if __name__ == '__main__':
     lr = 0.01
     momentum = 0.9
     weight_decay = 5e-4
-    epochs = 10
+    epochs = 4
 
     # Need to apply data augmentation on train set split ......
     train_loader = torch.utils.data.DataLoader(full_dataset, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=num_workers)  # Augmentation
@@ -259,11 +279,21 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(full_dataset, batch_size=batch_size, sampler=test_sampler, shuffle=False, num_workers=num_workers)
 
     # Constructing the model & setting up
-    model = models.__dict__["resnet50"](pretrained=True)
+    # model = models.__dict__["resnet50"](pretrained=True)
+    model = FineTuneResnet50(num_class=8)
     print('designated device: ', device)
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr, momentum=momentum)
 
     main(epochs, model, train_loader, val_loader, test_loader, criterion, optimizer)
+    torch.save(model.state_dict(), "D:\\torch-model-weights\\resnet50_8class.pt")
 
+# Learning swift + reading code
+# Training classifier with burning images
+# Reading paper
+
+# 1. Shuffle when training
+# 2. Plotting the loss and accuracy for validation
+# 3. Plotting the confusion matrix
+# 4. Create two separate directories and apply different transformations
