@@ -15,7 +15,6 @@ import os
 import random
 import sklearn
 from sklearn import metrics
-# import wandb
 
 
 def train(model, train_loader, criterion, optimizer, epoch, lists, val_loader):
@@ -302,6 +301,7 @@ def shuffle_label_file(file_name):
     with open(file_name, 'r') as infile:
         for line in infile:
             lines.append(line)
+    infile.close()
     random.shuffle(lines)
     return lines
 
@@ -327,6 +327,48 @@ def write_files(valid_file, train_file, labels, k, i):
         out_train.write(train_label)
     for valid_label in valid_labels:
         out_valid.write(valid_label)
+    out_train.close()
+    out_valid.close()
+
+
+def write_files_by_patients(valid_file, train_file, shuffled_patient_ids, patient_img_mapping, k, i):
+    fold_size = len(shuffled_patient_ids) // k
+    train_labels = []
+    valid_labels = []
+    for c in range(0, k):
+        idx = slice(c * fold_size, (c + 1) * fold_size)
+        part = shuffled_patient_ids[idx]
+        temp = []
+        for p_ID in part:
+            temp.extend(patient_img_mapping[p_ID])
+        if c == i:
+            valid_labels = temp
+        elif train_labels is []:
+            train_labels = temp
+        else:
+            train_labels.extend(temp)
+    print('train_labels: ', train_labels)
+    print('valid_labels: ', valid_labels)
+    out_train = open(train_file, 'w')
+    out_val = open(valid_file, 'w')
+    for train_label in train_labels:
+        out_train.write(train_label)
+    for valid_label in valid_labels:
+        out_val.write(valid_label)
+    out_train.close()
+    out_val.close()
+
+
+def create_patient_map(patient_ids, file_name):
+    mapping = {}
+    for id in patient_ids:
+        mapping[id] = []
+    with open(file_name, 'r') as infile:
+        for line in infile:
+            patient = int(line.strip('\n').split('_')[0])
+            mapping[patient].append(line)
+    infile.close()
+    return mapping
 
 
 # Define the default data loader here
@@ -344,8 +386,6 @@ class BurnDataset(torch.utils.data.Dataset):
         self.dataset = dataset
         self.data_transforms = data_transforms
         self.loader = loader
-        # print('img[0] name: ', self.img_name[0], ' label[0]: ', self.img_label[0])
-        # print('img[-1] name: ', self.img_name[-1], ' label[-1]: ', self.img_label[-1])
 
     def __len__(self):
         return len(self.img_name)
@@ -389,21 +429,22 @@ class FineTuneResNet(nn.Module):
 
 
 if __name__ == '__main__':
-    # wandb.init('my_burn_project')
 
     # Define hyperparameters here
     num_folds = 5
-    # batch_size = 32--改回这个
+    # batch_size = 32
     batch_size = 50
     num_workers = 2
-    lr = 0.01
+    lr = 0.009
+    # lr = 0.01
+    # lr = 0.075 -- 不好用
     # lr = 0.02--可以保持用0.01
 
     momentum = 0.9
     weight_decay = 5e-4
-    epochs = 170
+    # epochs = 170
+    epochs = 230
     # Planning to train for 200 to 230 epochs--validation may not perform better, but train can definitely overfit
-    printing_freq = 20
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Defining directories
@@ -413,8 +454,12 @@ if __name__ == '__main__':
     label_txt = os.path.normpath("%s\%s\%s" % ("D:", "burn_level_images_dataset", "right_img_label.txt"))
 
     # Writing into the txt files
-    shuffled_labels = shuffle_label_file(label_txt)
-    print(len(shuffled_labels))
+    # shuffled_labels = shuffle_label_file(label_txt)
+    patient_id = list(range(1, 52))
+    patient_id.extend(list(range(63, 70)))
+    patient_id.extend(list(range(83, 97)))
+    patient_img_dict = create_patient_map(patient_id, label_txt)
+    random.shuffle(patient_id)
 
     # Apply different transformations on training and validating data sets
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -448,7 +493,8 @@ if __name__ == '__main__':
         model.to(device)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.SGD(model.parameters(), lr, momentum=momentum)  # Consider only changing the weights on the last layer
-        write_files(valid_txt, train_txt, shuffled_labels, num_folds, i)
+        # write_files(valid_txt, train_txt, shuffled_labels, num_folds, i)  # change this function
+        write_files_by_patients(valid_txt, train_txt, patient_id, patient_img_dict, num_folds, i)
 
         train_dataset = BurnDataset(img_path=dataset_dir,
                                     txt_path=train_txt,
@@ -486,10 +532,5 @@ if __name__ == '__main__':
     print('Best AUC_PRC = ', highest_auc_prc)
     print('Best validation accuracy = ', highest_val_acc)
 
-
-
-
 # TODO:
-#        1.可以计算出train中每次iteration的id，然后存储到一个list里面，plot出来更完整
-#        2. 可以尝试只改变model最后一层的parameters
 # -> To run the k-fold experiments based on patients (split the dataset according to patients; if have 10 patients in total, put 2 as validation and 8 as training--using csv file provided)
