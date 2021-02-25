@@ -11,6 +11,9 @@ import torchvision.models as models
 from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
 import matplotlib.pyplot as plt
+from captum.attr import IntegratedGradients
+from PIL import Image
+import tensorflow as tf
 
 
 def train(model, train_loader, criterion, optimizer, epoch, lists):
@@ -271,7 +274,7 @@ if __name__ == '__main__':
     lr = 0.01
     momentum = 0.9
     weight_decay = 5e-4
-    epochs = 4
+    epochs = 2
 
     # Need to apply data augmentation on train set split ......
     train_loader = torch.utils.data.DataLoader(full_dataset, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=num_workers)  # Augmentation
@@ -287,13 +290,37 @@ if __name__ == '__main__':
     optimizer = optim.SGD(model.parameters(), lr, momentum=momentum)
 
     main(epochs, model, train_loader, val_loader, test_loader, criterion, optimizer)
-    torch.save(model.state_dict(), "D:\\torch-model-weights\\resnet50_8class.pt")
 
-# Learning swift + reading code
-# Training classifier with burning images
-# Reading paper
+    model.eval()
+    ig = IntegratedGradients(model)
 
-# 1. Shuffle when training
-# 2. Plotting the loss and accuracy for validation
-# 3. Plotting the confusion matrix
-# 4. Create two separate directories and apply different transformations
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    def_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        normalize,
+    ])
+
+    # img = Image.open('D:\\natural_images_dataset\\natural_images\\cat\\cat_0066.jpg')
+    # img = def_transform(img)
+    # input_img = torch.tensor(img)
+    # input_img.view(1, 3, 224, 224)
+    # print(input_img)
+    # print(input_img.shape)
+
+    img = Image.open(tf.gfile.Open('D:\\natural_images_dataset\\natural_images\\cat\\cat_0066.jpg', 'rb')).convert(
+                'RGB').resize((2, 256, 256), Image.BILINEAR)
+    input_img = def_transform(img)
+
+    print(input_img)
+    print(input_img.shape)
+
+    baseline = np.zeros((3, 224, 224))
+    baseline = torch.tensor(baseline)
+
+    attributions, approximation_error = ig.attribute(input_img, baseline, target=2, return_convergence_delta=True)
+    print('attributions: ', attributions)
+    print('approx error: ', approximation_error)
+
+    # torch.save(model.state_dict(), "D:\\torch-model-weights\\resnet50_8class.pt")
