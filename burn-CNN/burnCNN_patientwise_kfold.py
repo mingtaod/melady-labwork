@@ -519,6 +519,7 @@ if __name__ == '__main__':
         highest_auc_roc = max(highest_auc_roc, auc_roc)
         highest_auc_prc = max(highest_auc_prc, auc_prc)
         highest_val_acc = max(highest_val_acc, valid_acc_i)
+        torch.save(model.state_dict(), "D:\\torch-model-weights\\burnCNN_patientwise_fold" + str(i) + ".pt")
 
     avg_auc_roc = sum_auc_roc / 5
     avg_auc_prc = sum_auc_prc / 5

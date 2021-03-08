@@ -153,9 +153,19 @@ def plot_losses(lst_loss, title, iteration):
     plt.xlabel('nth iteration')
     plt.legend(loc='upper left')
     plt.title(title)
-    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, title+'.png'))
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', iteration, title+'.png'))
     plt.savefig(save_path)
     # plt.show()
+    plt.close()
+
+
+def plot_losses_final_averaged(lst_loss, title):
+    plt.plot(lst_loss, '-r', label='loss')
+    plt.xlabel('nth iteration')
+    plt.legend(loc='upper left')
+    plt.title(title)
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', 'final_averaged_plots', title+'.png'))
+    plt.savefig(save_path)
     plt.close()
 
 
@@ -166,12 +176,25 @@ def plot_acc(lst_acc_1, lst_acc_5, title, iteration):
     plt.xlabel('nth iteration')
     plt.legend(loc='upper left')
     plt.title(title)
-    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, title+'.png'))
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', iteration, title+'.png'))
     plt.savefig(save_path)
     # plt.show()
     plt.close()
 
 
+def plot_acc_final_averaged(lst_acc_1, lst_acc_5, title):
+    plt.plot(lst_acc_1, '-b', label='val accuracy@1')
+    if lst_acc_5 is not None:
+        plt.plot(lst_acc_5, '-r', label='val accuracy@5')
+    plt.xlabel('nth iteration')
+    plt.legend(loc='upper left')
+    plt.title(title)
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', 'final_averaged_plots', title+'.png'))
+    plt.savefig(save_path)
+    plt.close()
+
+
+# TODO: Temporarily disable text
 def plot_roc(fpr_input, tpr_input, threshold_input, iteration):
     plt.plot(fpr_input, tpr_input)
     plt.title('ROC Curve')
@@ -184,13 +207,12 @@ def plot_roc(fpr_input, tpr_input, threshold_input, iteration):
     ax.yaxis.set_major_locator(y_major_locator)
     plt.xlim(0, 1)
     plt.ylim(0, 1)
-    index = 0
-    for x, y in zip(fpr_input, tpr_input):
-        plt.text(x, y+0.02, '%.2f' % threshold_input[index], ha='center', va='bottom', fontsize=8)
-        index += 1
-    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, 'valid_roc.png'))
+    # index = 0
+    # for x, y in zip(fpr_input, tpr_input):
+    #     plt.text(x, y+0.02, '%.2f' % threshold_input[index], ha='center', va='bottom', fontsize=8)
+    #     index += 1
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', iteration, 'valid_roc.png'))
     plt.savefig(save_path)
-    # plt.show()
     plt.close()
 
 
@@ -213,7 +235,7 @@ def plot_prc(precision, recall, threshold_input, iteration):
     # for x, y in zip(recall, precision):
     #     plt.text(x, y+0.02, '%.2f' % threshold_input[index], ha='center', va='bottom', fontsize=8)
     #     index += 1
-    save_path = os.path.normpath("%s\%s\%s" % ('plots', iteration, 'valid_prc.png'))
+    save_path = os.path.normpath("%s\%s\%s\%s" % ('plots', 'image-wise', iteration, 'valid_prc.png'))
     plt.savefig(save_path)
     # plt.show()
     plt.close()
@@ -278,7 +300,7 @@ def main(epochs, model, train_loader, val_loader, criterion, optimizer, iteratio
         else:
             curr_acc, curr_loss, auc_roc, auc_prc = validate(model, val_loader, criterion, lists, False, iteration)
         best_acc = max(curr_acc, best_acc)
-        best_train_acc= max(train_acc_curr, best_train_acc)
+        best_train_acc = max(train_acc_curr, best_train_acc)
         lowest_avg_loss = min(curr_loss, lowest_avg_loss)
         best_auc_roc = max(auc_roc, best_auc_roc)
         best_auc_prc = max(auc_prc, best_auc_prc)
@@ -294,7 +316,8 @@ def main(epochs, model, train_loader, val_loader, criterion, optimizer, iteratio
     print('Best auc_roc = ', best_auc_roc)
     print('Best auc_prc = ', best_auc_prc)
     print('\n')
-    return best_auc_roc, best_auc_prc, best_train_acc, best_acc
+
+    return best_auc_roc, best_auc_prc, best_train_acc, best_acc, lists
 
 
 def shuffle_label_file(file_name):
@@ -401,7 +424,8 @@ if __name__ == '__main__':
 
     momentum = 0.9
     weight_decay = 5e-4
-    epochs = 170
+    # epochs = 170
+    epochs = 400
     # Planning to train for 200 to 230 epochs--validation may not perform better, but train can definitely overfit
     printing_freq = 20
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -419,20 +443,33 @@ if __name__ == '__main__':
     # Apply different transformations on training and validating data sets
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
+    # train_transform = transforms.Compose([
+    #     transforms.RandomResizedCrop(224),
+    #     transforms.RandomHorizontalFlip(),
+    #     # transforms.Resize(256),
+    #     # transforms.CenterCrop(224),
+    #     transforms.ToTensor(),
+    #     normalize
+    # ])
     train_transform = transforms.Compose([
-        transforms.RandomResizedCrop(224),
+        transforms.RandomRotation(30),
+        transforms.CenterCrop(224),
         transforms.RandomHorizontalFlip(),
-        # transforms.Resize(256),
-        # transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize
     ])
+
     valid_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize,
     ])
+    # valid_transform = transforms.Compose([
+    #     transforms.Resize((224, 224)),
+    #     transforms.ToTensor(),
+    #     normalize
+    # ])
 
     sum_auc_roc = 0.0
     sum_auc_prc = 0.0
@@ -440,6 +477,11 @@ if __name__ == '__main__':
     highest_auc_roc = 0.0
     highest_auc_prc = 0.0
     highest_val_acc = 0.0
+
+    lst_loss_train_sum = np.array(epochs * [0.0])
+    lst_acc_train_sum = np.array(epochs * [0.0])
+    lst_loss_val_sum = np.array(epochs * [0.0])
+    lst_acc_val_sum = np.array(epochs * [0.0])
 
     # K-folds main loop
     for i in range(num_folds):
@@ -466,17 +508,35 @@ if __name__ == '__main__':
         valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
         print('-------------------K-fold: ', i, '-th iteration starts below-------------------')
-        auc_roc, auc_prc, train_acc_i, valid_acc_i = main(epochs, model, train_loader, valid_loader, criterion, optimizer, i)
+        auc_roc, auc_prc, train_acc_i, valid_acc_i, returned_lists = main(epochs, model, train_loader, valid_loader, criterion, optimizer, i)
         sum_auc_roc += auc_roc
         sum_auc_prc += auc_prc
         sum_valid_acc += valid_acc_i
+
+        lst_loss_train_sum += returned_lists['loss_train']
+        lst_acc_train_sum += returned_lists['acc_train']
+        lst_loss_val_sum += returned_lists['loss_val']
+        lst_acc_val_sum += returned_lists['acc_val']
+
         highest_auc_roc = max(highest_auc_roc, auc_roc)
         highest_auc_prc = max(highest_auc_prc, auc_prc)
         highest_val_acc = max(highest_val_acc, valid_acc_i)
 
+        torch.save(model.state_dict(), "D:\\torch-model-weights\\burnCNN_imagewise_weights\\burnCNN_fold" + str(i) + ".pt")
+
     avg_auc_roc = sum_auc_roc / 5
     avg_auc_prc = sum_auc_prc / 5
     avg_valid_acc = sum_valid_acc / 5
+
+    lst_loss_train_sum /= 5.0
+    lst_acc_train_sum /= 5.0
+    lst_loss_val_sum /= 5.0
+    lst_acc_val_sum /= 5.0
+
+    plot_losses_final_averaged(lst_loss_train_sum, '5fold_average_train_loss_plot')
+    plot_acc_final_averaged(lst_acc_train_sum, None, '5fold_average_train_acc_plot')
+    plot_losses_final_averaged(lst_loss_val_sum, '5fold_average_val_loss_plot')
+    plot_acc_final_averaged(lst_acc_val_sum, None, '5fold_average_val_acc_plot')
 
     print('\nK-fold validation summary: ')
     print('Average AUC_ROC = ', avg_auc_roc)
